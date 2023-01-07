@@ -1,5 +1,4 @@
-# Ben_Boyd_MSc_Project
-
+# RedshiftFlow
 
 This repository contains the pipeline for two models designed for rapid galaxy reshift posterior estimation. The first model is a mixture density network (MDN) whilst the second is a normalising flow. The models are trained on simulated data and then applied to real COSMOS20 galaxies which can be downloaded from here: https://cosmos2020.calet.org/ [1]
 
