@@ -1,92 +1,103 @@
 # Ben_Boyd_MSc_Project
 
 
+This repository contains the pipeline for two models designed for rapid galaxy reshift posterior estimation. The first model is a mixture density network (MDN) whilst the second is a normalising flow. The models are trained on simulated data and then applied to real COSMOS20 galaxies which can be downloaded from here: https://cosmos2020.calet.org/ [1]
 
-## Getting started
+The pipeline should be used in the follower order:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- simulate data using Simulate_Data.py, the FSPS [2][3] and PROVABGS [4][5] libraries are required for this.
+- apply niose to synthetic galaxies using Noise_Model.ipynb
+- train models in MDN_COSMOS_Train.ipynb or NSF_COSMOS_Train.ipynb
+- the train models can then be applied to held out synthetic data or real COSMOS data in MDN_COSMOS_Train.ipynb or NSF_COSMOS_Train.ipynb. These notebooks also include novel calibrations between synthetic and real datasets.
+- comparisons between the two model perfmances can be seen in Model_Comparison.ipynb.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
 
-## Add your files
+## Design and Novelty
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+MDN: 
 
-```
-cd existing_repo
-git remote add origin https://gitlab.doc.ic.ac.uk/bmb121/ben_boyd_msc_project.git
-git branch -M master
-git push -uf origin master
-```
+The mixture density network (MDN) was implemented by building
+on top of an existing JAX implementation [6]. The original implementation learnt a one-
+dimensional probability distribution given a one-dimensional input. The first area of novelty
+was to edit the model to allow for multi-dimensional conditionals. The simple neural network
+functions were replaced with JAX stax library networks [8], allowing the model to be JIT compatible.
 
-## Integrate with your tools
+Functions were also added to allow the maximum a posterior (MAP) estimation to be
+found from any given number of Gaussian cluster. The mean of each cluster was evaluated in its
+respective cluster and all the other clusters, then summed. The mean with the highest summed
+probability was given as the MAP prediction. Careful thought was given to these functions to
+retain the shapes of the data structures and reduce the number of iterations. This allowed for
+the fast MAP prediction for Gaussian Mixtures in a matter of seconds. Further functions were
+added to the pipeline to allow for the plotting of the one dimensional multi-cluster posteriors.
+Finally, custom integration functions were added to allow the PIT of the mixtures to
+be calculated. This was done by summing the weighted cumulative distribution functions of the
+mixtures evaluated at the true redshift.
 
-- [ ] [Set up project integrations](https://gitlab.doc.ic.ac.uk/bmb121/ben_boyd_msc_project/-/settings/integrations)
+Normalising Flow:
 
-## Collaborate with your team
+The rational quadratic neural spline flow (NSF), built on top of a
+JAX implementation of a single spline layer [7]. The existing implementation only modelled
+N-dimensional joint distributions, rather than conditional posteriors. The first modification in-
+volved creating neural networks for each spline to make the learnable parameters conditional
+on N-dimensional inputs. The spline layers were implemented for N-dimensional distributions
+which meant that they needed to be edited to support one-dimensional distributions. Parts of the
+Rational Quadratic function needed to be modified to allow for JIT compilation, which requires
+all array shapes to be preserved.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+There were existing Serial and Flow functions which allowed the stacking of splines into
+larger flows [7]. These needed to be edited to ensure that only one-dimension was transformed
+and that the original N-dimensional conditionals were injected between each spline.
 
-## Test and Deploy
 
-Use the built-in continuous integration in GitLab.
+Further custom functions were added to allow for the MAP prediction to be found from
+each flow. Two methods were used to do this. The first method involved sampling the flow
+many times and evaluating the probability of each sample. This method was quick, but less
+accurate. The second method involved evaluating the flow across a grid and picking the point
+with the highest evaluated probability to be the MAP. This probability grid could also be re-used
+to plot the posterior as a function of redshift. The grid evaluation function with bin widths of
+z = 0.005 was used to determine redshift predictions. A final trapezium numerical integration
+used the same gird to evaluate the PIT of each galaxy posterior.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
 
-***
+Calibration Implementation:
 
-# Editing this README
+Since the flux and error offset calibration would involve repeatedly evaluating the JAX models,
+the calibration would also need to be made using the same library. This was done using the
+JAXopt Scipy Bounded Minimize function [9][10]. Each models respective loss was evaluated 
+after applying the calibration parameters. If a parameter was to be left constant during an
+optimisation stage, the range of its bound was set to zero. The be application of the calibration
+parameters had to be efficient with consistent array shapes. Matrix multiplication was used as
+a quick technique for applying calibration parameters to fluxes and errors, before model losses
+were evaluated. This also allowed for the optimisation to be JIT compilable for rapid calibration.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Credits
 
-## Name
-Choose a self-explaining name for your project.
+The simulated data uses the PROABGS stellar population synthesis model [4][5]. The MDN was built on top of an existing implementatioen where extra functionality is added (See Design) [6]. The one dimenisonal conditional normalising flow was adapted from an existing implentation that modelled multi-dimensional joint distributions [7]. 
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## References
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+[1] J. R. Weaver et al., “Cosmos2020: A panchromatic view of the universe to z ∼ 10 from
+two complementary catalogs,” ApJS, vol. 258, no. 1, p. 11, 2022.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+[2] C. Conroy and J. E. Gunn, “Fsps: Flexible stellar population synthesis,” ASCL, ascl–
+1010, 2010.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+[3] https://dfm.io/python-fsps/current/
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+[4] C. Hahn et al., “The desi probabilistic value-added bright galaxy survey (provabgs) mock
+challenge,” arXiv preprint arXiv:2202.01809, 2022.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+[5] https://github.com/changhoonhahn/provabgs
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+[6] Hardmare, Mixture density networks with jax, https://github.com/hardmaru/mdn_jax_tutorial, version 816c95e5405522f6214fb0b83a5f741c97ffd4e8, 2020.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+[7] C. Waites, Normalizing flows in jax, https://github.com/ChrisWaites/jax-flows, version 26dce814478c656b2ed7e3295ec17b09cad200ee, 2021.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+[8] J. Bradbury et al., JAX: Composable transformations of Python+NumPy programs, ver-
+sion 0.3.13, 2018. [Online]. Available: http://github.com/google/jax
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+[9] M. Blondel et al., “Efficient and modular implicit differentiation
+,” arXiv preprint arXiv:2105.15183, 2021
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+[10] https://github.com/google/jaxopt
